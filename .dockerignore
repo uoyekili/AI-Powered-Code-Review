@@ -1,0 +1,15 @@
+**/.env
+**/.env.local
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.git
+**/venv
+**/.venv
+**/*.md
+!README.md

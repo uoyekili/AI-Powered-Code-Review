@@ -1,0 +1,35 @@
+[project]
+name = "code-review-backend"
+version = "0.1.0"
+description = "AI-Powered GitHub Code Review API"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "pydantic>=2.11",
+    "pydantic-settings==2.7.0",
+    "sqlalchemy[asyncio]==2.0.36",
+    "asyncpg==0.30.0",
+    "alembic==1.14.0",
+    "gitpython==3.1.43",
+    "langchain>=0.3.20",
+    "langchain-core>=0.3.34",
+    "langchain-openai>=0.3",
+    "httpx==0.28.1",
+    "python-dotenv==1.0.1",
+    "greenlet==3.1.1",
+    "psycopg2-binary==2.9.10",
+    "pip-system-certs>=5.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false
