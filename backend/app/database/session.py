@@ -1,3 +1,7 @@
+"""Async SQLAlchemy engine and session helpers."""
+
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -20,6 +24,12 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Yield a request-scoped database session.
+
+    Commits on success and rolls back on error.
+    """
+
     async with AsyncSessionLocal() as session:
         try:
             yield session

@@ -1,16 +1,37 @@
+"""In-process background task adapter for review jobs."""
+
+from __future__ import annotations
+
 import asyncio
 import logging
 
-from app.services.review_service import ReviewOrchestrator
-
 logger = logging.getLogger(__name__)
-_orchestrator = ReviewOrchestrator()
 
 
 def enqueue_review_task(task_id: str) -> None:
-    asyncio.create_task(_run_with_logging(task_id))
+    """
+    Enqueue a review task for background processing.
+
+    Args:
+        task_id: Review task identifier.
+
+    TODO:
+        Replace asyncio.create_task with a durable queue and parallel workers.
+    """
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.error("No running event loop; cannot enqueue task %s", task_id)
+        return
+
+    loop.create_task(_run_task(task_id))
 
 
-async def _run_with_logging(task_id: str) -> None:
-    logger.info("Starting background review for task %s", task_id)
-    await _orchestrator.run_review(task_id)
+async def _run_task(task_id: str) -> None:
+    """Run the worker service for one task."""
+
+    from app.services.worker_service import WorkerService
+
+    worker = WorkerService()
+    await worker.process_task(task_id)

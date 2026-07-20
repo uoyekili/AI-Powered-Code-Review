@@ -1,0 +1,17 @@
+---
+alwaysApply: true
+---
+---
+description: Prevent the agent from executing terminal commands
+alwaysApply: true
+---
+
+# Terminal Safety
+
+When operating in Agent mode:
+
+- Never execute terminal commands automatically.
+- Never run `npm`, `pnpm`, `yarn`, `bun`, `python`, `pip`, `git`, `docker`, `make`, or any shell command.
+- Do not use the terminal tool unless the user explicitly asks you to execute a command.
+- If running a command would help, explain which command should be run and wait for user confirmation.
+- Prefer editing files and providing code changes over executing commands.

@@ -1,7 +1,7 @@
 [project]
 name = "code-review-backend"
 version = "0.1.0"
-description = "AI-Powered GitHub Code Review API"
+description = "AI-Powered GitHub Code Review API skeleton"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi==0.115.6",
@@ -11,25 +11,27 @@ dependencies = [
     "sqlalchemy[asyncio]==2.0.36",
     "asyncpg==0.30.0",
     "alembic==1.14.0",
-    "gitpython==3.1.43",
-    "langchain>=0.3.20",
-    "langchain-core>=0.3.34",
-    "langchain-openai>=0.3",
-    "httpx==0.28.1",
-    "python-dotenv==1.0.1",
     "greenlet==3.1.1",
     "psycopg2-binary==2.9.10",
-    "pip-system-certs>=5.3",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "httpx>=0.28",
+    "ruff>=0.9",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
 
 [tool.uv]
 package = false

@@ -1,16 +1,17 @@
 import axios from 'axios'
-import { Review, AnalysisStep } from '@/types'
-import { env } from '@/lib/env'
+import type { ProgressResponse, Review } from '@/types'
+import { env } from '@/utils/env'
 
 const api = axios.create({
   baseURL: env.NEXT_PUBLIC_API_URL,
-  timeout: 120000,
+  timeout: 120_000,
 })
 
 export const reviewService = {
-  async submitReview(repositoryUrl: string): Promise<{ reviewId: string }> {
+  async submitReview(repositoryUrl: string, branch: string): Promise<{ reviewId: string }> {
     const response = await api.post<{ reviewId: string }>('/review', {
       repositoryUrl,
+      branch,
     })
     return response.data
   },
@@ -20,18 +21,8 @@ export const reviewService = {
     return response.data
   },
 
-  async getProgress(reviewId: string): Promise<{
-    progress: number
-    currentStep: string
-    steps: AnalysisStep[]
-    status?: string
-  }> {
-    const response = await api.get<{
-      progress: number
-      currentStep: string
-      steps: AnalysisStep[]
-      status?: string
-    }>(`/review/${reviewId}/progress`)
+  async getProgress(reviewId: string): Promise<ProgressResponse> {
+    const response = await api.get<ProgressResponse>(`/review/${reviewId}/progress`)
     return response.data
   },
 
@@ -42,10 +33,9 @@ export const reviewService = {
     return response.data
   },
 
-  async downloadReport(reviewId: string, format: 'markdown' | 'pdf' = 'markdown'): Promise<Blob> {
+  async downloadReport(reviewId: string): Promise<Blob> {
     const reportContent = await this.getReport(reviewId)
-    const mimeType = format === 'markdown' ? 'text/markdown' : 'application/pdf'
-    return new Blob([reportContent], { type: mimeType })
+    return new Blob([reportContent], { type: 'text/markdown' })
   },
 }
 

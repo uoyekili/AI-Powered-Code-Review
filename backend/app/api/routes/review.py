@@ -1,12 +1,15 @@
-import logging
+"""HTTP routes for health checks and review operations."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from __future__ import annotations
+
+import logging
+import uuid
+
+from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppError
-from app.database.session import get_db
+from app.api.dependencies import DatabaseSession, ReviewServiceDependency
 from app.schemas.review_schema import (
     HealthResponse,
     ProgressResponse,
@@ -14,20 +17,15 @@ from app.schemas.review_schema import (
     SubmitReviewRequest,
     SubmitReviewResponse,
 )
-from app.services.review_service import ReviewOrchestrator
-from app.workers.review_worker import enqueue_review_task
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-orchestrator = ReviewOrchestrator()
-
-
-def _handle_app_error(exc: AppError) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail=exc.message)
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(session: AsyncSession = Depends(get_db)) -> HealthResponse:
+async def health_check(session: DatabaseSession) -> HealthResponse:
+    """Return API and database health status."""
+
     db_status = "ok"
     try:
         await session.execute(text("SELECT 1"))
@@ -44,45 +42,76 @@ async def health_check(session: AsyncSession = Depends(get_db)) -> HealthRespons
 @router.post("/review", response_model=SubmitReviewResponse)
 async def submit_review(
     payload: SubmitReviewRequest,
-    session: AsyncSession = Depends(get_db),
+    service: ReviewServiceDependency,
 ) -> SubmitReviewResponse:
-    try:
-        review_id = await orchestrator.submit_review(session, payload.repository_url)
-        enqueue_review_task(review_id)
-        return SubmitReviewResponse(review_id=review_id)
-    except AppError as exc:
-        raise _handle_app_error(exc) from exc
+    """
+    Accept a repository URL and start a review task.
+
+    Args:
+        payload: Submit review request.
+        service: Review application service.
+
+    Returns:
+        Created review identifier.
+    """
+
+    review_id = await service.submit_review(payload.repository_url, payload.branch)
+    return SubmitReviewResponse(review_id=review_id)
 
 
 @router.get("/review/{task_id}", response_model=ReviewSchema)
 async def get_review(
-    task_id: str,
-    session: AsyncSession = Depends(get_db),
+    task_id: uuid.UUID,
+    service: ReviewServiceDependency,
 ) -> ReviewSchema:
-    try:
-        return await orchestrator.get_review(session, task_id)
-    except AppError as exc:
-        raise _handle_app_error(exc) from exc
+    """
+    Return the review result for a task.
+
+    Args:
+        task_id: Review task UUID.
+        service: Review application service.
+
+    Returns:
+        Review response payload.
+    """
+
+    return await service.get_review(str(task_id))
 
 
 @router.get("/review/{task_id}/progress", response_model=ProgressResponse)
 async def get_progress(
-    task_id: str,
-    session: AsyncSession = Depends(get_db),
+    task_id: uuid.UUID,
+    service: ReviewServiceDependency,
 ) -> ProgressResponse:
-    try:
-        return await orchestrator.get_progress(session, task_id)
-    except AppError as exc:
-        raise _handle_app_error(exc) from exc
+    """
+    Return progress for a review task.
+
+    Args:
+        task_id: Review task UUID.
+        service: Review application service.
+
+    Returns:
+        Progress response payload.
+    """
+
+    return await service.get_progress(str(task_id))
 
 
 @router.get("/report/{task_id}", response_class=PlainTextResponse)
 async def get_report(
-    task_id: str,
-    session: AsyncSession = Depends(get_db),
+    task_id: uuid.UUID,
+    service: ReviewServiceDependency,
 ) -> PlainTextResponse:
-    try:
-        content = await orchestrator.get_report(session, task_id)
-        return PlainTextResponse(content, media_type="text/markdown; charset=utf-8")
-    except AppError as exc:
-        raise _handle_app_error(exc) from exc
+    """
+    Download the Markdown report for a review task.
+
+    Args:
+        task_id: Review task UUID.
+        service: Review application service.
+
+    Returns:
+        Markdown report as plain text.
+    """
+
+    content = await service.get_report(str(task_id))
+    return PlainTextResponse(content, media_type="text/markdown; charset=utf-8")

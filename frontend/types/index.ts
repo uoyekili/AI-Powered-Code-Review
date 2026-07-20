@@ -56,6 +56,7 @@ export interface FileReview {
 export interface Review {
   id: string
   repositoryUrl: string
+  branch: string
   repository: Repository
   metrics: CodeReviewMetrics
   issueSeverity: IssueSeverity
@@ -79,4 +80,11 @@ export interface AnalysisStep {
   description: string
   status: 'pending' | 'in-progress' | 'completed' | 'failed'
   estimatedTime: number
+}
+
+export interface ProgressResponse {
+  progress: number
+  currentStep: string
+  steps: AnalysisStep[]
+  status: string
 }

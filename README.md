@@ -1,41 +1,140 @@
-# AI-Powered GitHub Code Review
+# AI-Powered GitHub Code Review (Skeleton)
 
-A full-stack application that automatically reviews the source code of a public GitHub repository using AI.
+Clean project skeleton for an AI-assisted GitHub code review application.
 
-A user pastes a repo URL, and the system clones the repo, scans the source code, analyzes it with Azure OpenAI, then returns a review dashboard along with a downloadable Markdown report.
+This repository is intentionally incomplete. Business logic is stubbed with `NotImplementedError` or mock return values so you can implement each stage yourself.
 
-## What It Does
+## Architecture
 
-- Accepts a public GitHub repo URL and creates a background review task.
-- Clones the repo and scans files (ignoring `node_modules`, `.git`, etc.), collecting language stats, file count, and line count.
-- Uses Azure OpenAI (via LangChain) to analyze each file, then aggregates the results into an overall assessment: security, performance, code quality, architecture, and maintainability.
-- Scores the repository and tallies issues by severity and by category.
-- Lets the frontend track progress in real time and view the report; exports the report as Markdown.
+```text
+User → FastAPI → ReviewService → ReviewRepository → PostgreSQL
+                 ReviewService → WorkerService → ReviewPipeline
+                                      ├─ RepositoryService
+                                      ├─ StaticAnalysisService
+                                      ├─ LLMReviewService
+                                      └─ ReportService
+Frontend (Next.js) polls progress and renders the final mock report.
+```
 
-## Tech Stack
+## Project Layout
 
-- **Frontend**: Next.js, React, TanStack Query
-- **Backend**: FastAPI, SQLAlchemy, Alembic, GitPython, LangChain
-- **Database**: PostgreSQL
-- **AI**: Azure OpenAI
+```text
+backend/app/
+  api/routes/       # Thin HTTP routes
+  config/           # Settings
+  core/             # Exceptions and logging
+  database/         # Engine and sessions
+  models/           # Single ReviewTask ORM model
+  repositories/     # Persistence helpers
+  review/           # Pipeline sequencing
+  schemas/          # Pydantic API contracts
+  services/         # Service interfaces (stubs)
+  workers/          # Background task adapter
+  utils/            # Small helpers
 
-## Main API
+frontend/
+  app/              # Next.js App Router pages
+  components/       # Small UI components
+  hooks/            # Client state/polling
+  services/         # API client
+  types/            # Shared TypeScript contracts
+  utils/            # Env and formatting helpers
+```
+
+## Mock Data Flow
+
+1. `POST /api/review` validates a GitHub URL and creates a `review_tasks` row.
+2. An in-process worker advances mock pipeline steps and stores a zeroed result.
+3. `GET /api/review/{id}/progress` returns step status for the loading page.
+4. `GET /api/review/{id}` returns the mock review payload.
+5. `GET /api/report/{id}` returns a placeholder Markdown report.
+
+## API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET  | `/api/health` | Health check |
-| POST | `/api/review` | Submit a repo URL for review |
-| GET  | `/api/review/{task_id}` | Get the review result |
-| GET  | `/api/review/{task_id}/progress` | Track analysis progress |
-| GET  | `/api/report/{task_id}` | Download the Markdown report |
+| GET | `/api/health` | Health check |
+| POST | `/api/review` | Submit a repository URL |
+| GET | `/api/review/{task_id}` | Get review result |
+| GET | `/api/review/{task_id}/progress` | Track progress |
+| GET | `/api/report/{task_id}` | Download Markdown report |
 
-## Workflow
+## Setup
 
-1. The user submits a public GitHub repo URL.
-2. The backend validates the URL and creates a review task.
-3. The repo is cloned and its source code is scanned.
-4. Azure OpenAI analyzes the files and aggregates the results.
-5. Results are stored in PostgreSQL.
-6. The frontend polls progress and displays the dashboard report.
+### Prerequisites
 
-<!-- Setup, configuration, and run instructions... to be added later -->
+- Python 3.13 + [uv](https://github.com/astral-sh/uv)
+- Node.js 20+ + pnpm
+- PostgreSQL 16 (or Docker Compose)
+
+### Environment
+
+```bash
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+### Backend
+
+```bash
+cd backend
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+### Docker (dev)
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+## Implementation Checklist
+
+Implement these stages in order:
+
+1. **Clone repository** — `RepositoryService.clone_repository`
+2. **Scan repository** — language, framework, structure, file counts
+3. **Static analysis** — parse, lint, security, complexity, duplicates
+4. **Chunk repository** — `LLMReviewService.chunk_repository`
+5. **Parallel LLM review** — durable queue + worker pool
+6. **Merge results** — dedupe issues, rank severity, calculate scores
+7. **Generate report** — project summary, issue details, recommendations
+8. **Frontend polish** — richer issue detail and statistics views
+
+## Database
+
+The skeleton uses a single `review_tasks` table:
+
+- task state (`status`, `progress`, `current_step`)
+- `steps` JSON for progress UI
+- `result` JSON for the completed review payload
+- `report_markdown` for the downloadable report
+
+Existing multi-table schemas were intentionally discarded. Run migrations on a fresh database.
+
+## Tests
+
+```bash
+cd backend
+uv sync
+uv run pytest
+uv run ruff check app tests
+```
+
+```bash
+cd frontend
+pnpm install
+pnpm lint
+pnpm typecheck
+pnpm build
+```

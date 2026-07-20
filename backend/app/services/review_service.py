@@ -1,314 +1,231 @@
-import logging
+"""Application service for review task orchestration."""
+
+from __future__ import annotations
+
 import uuid
-from collections import Counter
-from pathlib import Path
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.settings import get_settings
 from app.core.exceptions import InvalidGitHubUrlError, ReviewNotFoundError
-from app.models import ReviewStatus, StepStatus
+from app.models import IssueSeverity, IssueType, Review, ReviewStatus
 from app.repositories.review_repository import ReviewRepository
-from app.services.github_service import GitHubService
-from app.services.langchain_service import LangChainService
-from app.services.report_service import ReviewMapper, generate_markdown_report
-from app.services.repo_scanner import RepoScannerService
-from app.utils.file_utils import chunk_text
+from app.schemas.review_schema import (
+    AnalysisStepSchema,
+    CodeReviewMetricsSchema,
+    FileReviewSchema,
+    IssuesByCategorySchema,
+    IssueSchema,
+    IssueSeveritySchema,
+    ProgressResponse,
+    RepositorySchema,
+    ReviewSchema,
+)
 from app.utils.github_url import parse_github_url
+from app.workers.review_worker import enqueue_review_task
 
-logger = logging.getLogger(__name__)
 
+class ReviewService:
+    """Validate requests, persist tasks, and expose review reads."""
 
-class ReviewOrchestrator:
-    STEP_PROGRESS = [5, 15, 30, 45, 60, 75, 90, 100]
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.repository = ReviewRepository(session)
 
-    def __init__(self) -> None:
-        self.github = GitHubService()
-        self.scanner = RepoScannerService()
-        self.llm = LangChainService()
+    async def submit_review(self, repository_url: str, branch: str) -> str:
+        """
+        Accept a repository URL and enqueue a review task.
 
-    async def submit_review(self, session: AsyncSession, repository_url: str) -> str:
+        Args:
+            repository_url: GitHub repository URL.
+            branch: Git branch to review.
+
+        Returns:
+            Created review task identifier.
+
+        Raises:
+            InvalidGitHubUrlError: If the URL is not a valid GitHub repository.
+        """
+
         repo_info = parse_github_url(repository_url)
-        if not repo_info:
+        if repo_info is None:
             raise InvalidGitHubUrlError()
 
-        repo = ReviewRepository(session)
-        task = await repo.create_task(repository_url)
-        await session.commit()
+        task = await self.repository.create_task(
+            repo_info.url,
+            repo_info.owner,
+            repo_info.name,
+            branch,
+        )
+        await self.session.commit()
+
+        # Start background mock pipeline
+        enqueue_review_task(str(task.id))
         return str(task.id)
 
-    async def get_review(self, session: AsyncSession, task_id: str):
-        repo = ReviewRepository(session)
-        task = await repo.get_task(uuid.UUID(task_id))
-        if not task:
-            raise ReviewNotFoundError(task_id)
-        if not task.repository or not task.review_result:
-            raise ReviewNotFoundError(task_id)
-        return ReviewMapper.to_review_schema(task)
+    async def get_review(self, task_id: str) -> ReviewSchema:
+        """
+        Return the completed review payload.
 
-    async def get_progress(self, session: AsyncSession, task_id: str):
-        repo = ReviewRepository(session)
-        task = await repo.get_task(uuid.UUID(task_id))
-        if not task:
-            raise ReviewNotFoundError(task_id)
-        return ReviewMapper.to_progress_response(task)
+        Args:
+            task_id: Review task identifier.
 
-    async def get_report(self, session: AsyncSession, task_id: str) -> str:
-        repo = ReviewRepository(session)
-        task = await repo.get_task(uuid.UUID(task_id))
-        if not task:
-            raise ReviewNotFoundError(task_id)
-        if task.report:
-            return task.report.markdown_content
-        if task.repository and task.review_result:
-            return generate_markdown_report(task)
-        raise ReviewNotFoundError(task_id)
+        Returns:
+            Review response schema.
 
-    async def run_review(self, task_id: str) -> None:
-        from app.database.session import AsyncSessionLocal
+        Raises:
+            ReviewNotFoundError: If the task does not exist.
+        """
 
-        clone_path: Path | None = None
-        async with AsyncSessionLocal() as session:
-            repo = ReviewRepository(session)
-            task = await repo.get_task(uuid.UUID(task_id))
-            if not task:
-                logger.error("Task %s not found for background processing", task_id)
-                return
+        task = await self._get_task_or_raise(task_id)
+        return self._to_review_schema(task)
 
-            repo_info = parse_github_url(task.repository_url)
-            if not repo_info:
-                await repo.update_task_progress(
-                    task,
-                    status=ReviewStatus.FAILED.value,
-                    error_message="Invalid GitHub URL",
-                )
-                await session.commit()
-                return
+    async def get_progress(self, task_id: str) -> ProgressResponse:
+        """
+        Return current progress for a review task.
 
-            try:
-                await self._set_step(repo, task, 0, StepStatus.IN_PROGRESS.value, "Repository Cloning")
-                metadata = await self.github.fetch_metadata(repo_info)
-                clone_path = self.github.clone_repository(repo_info, task_id)
-                await self._complete_step(repo, task, 0, 1)
+        Args:
+            task_id: Review task identifier.
 
-                await self._set_step(repo, task, 1, StepStatus.IN_PROGRESS.value, "Code Parsing")
-                scan = self.scanner.scan(clone_path)
-                await self._complete_step(repo, task, 1, 2)
+        Returns:
+            Progress response schema.
 
-                await repo.save_repository(
-                    task,
-                    {
-                        "name": repo_info.name,
-                        "owner": repo_info.owner,
-                        "url": repo_info.url,
-                        "description": metadata.description,
-                        "stars": metadata.stars,
-                        "forks": metadata.forks,
-                        "primary_language": scan.primary_language or metadata.primary_language,
-                        "languages": scan.languages,
-                        "file_count": scan.file_count,
-                        "dir_count": scan.dir_count,
-                        "total_lines": scan.total_lines,
-                        "last_updated": metadata.last_updated,
-                    },
-                )
-                await session.commit()
+        Raises:
+            ReviewNotFoundError: If the task does not exist.
+        """
 
-                file_reviews: list[dict] = []
-                settings = get_settings()
-
-                await self._set_step(repo, task, 2, StepStatus.IN_PROGRESS.value, "Security Analysis")
-
-                for scanned_file in scan.files:
-                    chunks = chunk_text(scanned_file.content, settings.chunk_size_chars)
-                    chunk_results = []
-                    for chunk in chunks[:3]:
-                        result = await self.llm.review_file(
-                            owner=repo_info.owner,
-                            repo=repo_info.name,
-                            file_path=scanned_file.path,
-                            extension=scanned_file.extension,
-                            content=chunk,
-                            line_count=scanned_file.lines,
-                        )
-                        chunk_results.append(result)
-
-                    merged = self._merge_file_results(chunk_results)
-                    file_reviews.append(
-                        {
-                            "path": scanned_file.path,
-                            "name": scanned_file.name,
-                            "extension": scanned_file.extension,
-                            "lines": scanned_file.lines,
-                            "summary": merged.get("summary", ""),
-                            "score": int(merged.get("score", 70)),
-                            "issues": merged.get("issues", []),
-                        }
-                    )
-
-                analysis_steps = [
-                    (2, "Security Analysis"),
-                    (3, "Performance Analysis"),
-                    (4, "Code Quality Check"),
-                    (5, "Architecture Review"),
-                ]
-                for idx, name in analysis_steps:
-                    await repo.update_step_status(task, idx, StepStatus.COMPLETED.value)
-                await repo.update_task_progress(
-                    task, progress=self.STEP_PROGRESS[6], current_step="Architecture Review"
-                )
-                await session.commit()
-
-                metadata_summary = "\n".join(
-                    f"--- {path} ---\n{content[:500]}" for path, content in scan.metadata_content.items()
-                )
-                file_summaries = "\n".join(
-                    f"- {fr['path']}: score={fr['score']}, issues={len(fr['issues'])}, summary={fr['summary'][:200]}"
-                    for fr in file_reviews
-                )
-
-                aggregate = await self.llm.aggregate_review(
-                    owner=repo_info.owner,
-                    repo=repo_info.name,
-                    primary_language=scan.primary_language,
-                    metadata_summary=metadata_summary or "No metadata files found.",
-                    file_summaries=file_summaries or "No source files reviewed.",
-                )
-
-                severity, categories = self._compute_stats(file_reviews, aggregate)
-
-                await self._set_step(repo, task, 6, StepStatus.IN_PROGRESS.value, "Report Generation")
-                await repo.save_review_result(
-                    task,
-                    metrics={
-                        "overall_score": int(aggregate["metrics"]["overall_score"]),
-                        "security_score": int(aggregate["metrics"]["security_score"]),
-                        "performance_score": int(aggregate["metrics"]["performance_score"]),
-                        "maintainability_score": int(aggregate["metrics"]["maintainability_score"]),
-                        "code_quality_score": int(aggregate["metrics"]["code_quality_score"]),
-                        "architecture_score": int(aggregate["metrics"]["architecture_score"]),
-                    },
-                    severity=severity,
-                    categories=categories,
-                    file_reviews=file_reviews,
-                )
-                await session.commit()
-
-                refreshed = await repo.get_task(uuid.UUID(task_id))
-                if refreshed:
-                    markdown = generate_markdown_report(refreshed)
-                    await repo.save_report(refreshed, markdown)
-                    await repo.update_step_status(refreshed, 6, StepStatus.COMPLETED.value)
-                    await repo.update_task_progress(
-                        refreshed,
-                        progress=100,
-                        current_step="Analysis Complete",
-                        status=ReviewStatus.COMPLETED.value,
-                    )
-                await session.commit()
-                logger.info("Review task %s completed successfully", task_id)
-
-            except Exception as exc:
-                logger.exception("Review task %s failed: %s", task_id, exc)
-                await repo.update_task_progress(
-                    task,
-                    status=ReviewStatus.FAILED.value,
-                    error_message=str(exc),
-                    current_step="Analysis Failed",
-                )
-                for step in sorted(task.steps, key=lambda s: s.order_index):
-                    if step.status == StepStatus.IN_PROGRESS.value:
-                        step.status = StepStatus.FAILED.value
-                await session.commit()
-            finally:
-                if clone_path:
-                    self.github.cleanup_clone(clone_path)
-
-    async def _set_step(
-        self,
-        repo: ReviewRepository,
-        task,
-        step_index: int,
-        status: str,
-        current_step: str,
-    ) -> None:
-        progress = self.STEP_PROGRESS[min(step_index, len(self.STEP_PROGRESS) - 1)]
-        await repo.update_step_status(task, step_index, status)
-        await repo.update_task_progress(
-            task,
-            progress=progress,
-            current_step=current_step,
-            status=ReviewStatus.IN_PROGRESS.value,
+        task = await self._get_task_or_raise(task_id)
+        steps = [
+            AnalysisStepSchema(
+                id=step.step_key,
+                name=step.name,
+                description=step.description,
+                status=step.status.value,
+                estimated_time=step.estimated_time,
+            )
+            for step in task.steps
+        ]
+        return ProgressResponse(
+            progress=task.progress,
+            current_step=task.current_step,
+            steps=steps,
+            status=task.status.value,
         )
 
-    async def _complete_step(self, repo: ReviewRepository, task, step_index: int, next_progress_index: int) -> None:
-        await repo.update_step_status(task, step_index, StepStatus.COMPLETED.value)
-        await repo.update_task_progress(task, progress=self.STEP_PROGRESS[next_progress_index])
+    async def get_report(self, task_id: str) -> str:
+        """
+        Return the Markdown report for a review task.
+
+        Args:
+            task_id: Review task identifier.
+
+        Returns:
+            Markdown report body.
+
+        Raises:
+            ReviewNotFoundError: If the task does not exist or has no report.
+        """
+
+        task = await self._get_task_or_raise(task_id)
+        if not task.report_markdown:
+            if task.status is not ReviewStatus.COMPLETED:
+                raise ReviewNotFoundError(task_id)
+            return (
+                f"# Code Review Report\n\n"
+                f"Repository: {task.repository_url}\n\n"
+                f"Branch: {task.branch}\n"
+            )
+        return task.report_markdown
+
+    async def _get_task_or_raise(self, task_id: str):
+        try:
+            task_uuid = uuid.UUID(task_id)
+        except ValueError as exc:
+            raise ReviewNotFoundError(task_id) from exc
+
+        task = await self.repository.get_task(task_uuid)
+        if task is None:
+            raise ReviewNotFoundError(task_id)
+        return task
 
     @staticmethod
-    def _merge_file_results(results: list[dict]) -> dict:
-        if not results:
-            return {"summary": "", "score": 70, "issues": []}
-        if len(results) == 1:
-            return results[0]
+    def _format_datetime(value: datetime | None) -> str:
+        if value is None:
+            return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        return value.isoformat().replace("+00:00", "Z")
 
-        all_issues = []
-        scores = []
-        summaries = []
-        for result in results:
-            scores.append(int(result.get("score", 70)))
-            summaries.append(result.get("summary", ""))
-            all_issues.extend(result.get("issues", []))
+    def _to_review_schema(self, task: Review) -> ReviewSchema:
+        repository = task.repository
+        severity_counts = {severity.value: 0 for severity in IssueSeverity}
+        category_counts = {issue_type.value: 0 for issue_type in IssueType}
+        for issue in task.issues:
+            severity_counts[issue.severity.value] += 1
+            category_counts[issue.type.value] += 1
 
-        seen_titles = set()
-        unique_issues = []
-        for issue in all_issues:
-            key = (issue.get("title"), issue.get("line"))
-            if key not in seen_titles:
-                seen_titles.add(key)
-                unique_issues.append(issue)
+        files = [
+            FileReviewSchema(
+                path=review_file.path,
+                name=review_file.name,
+                extension=review_file.extension,
+                lines=review_file.line_count,
+                issues=[
+                    IssueSchema(
+                        id=issue.external_id or str(issue.id),
+                        file=issue.file_path,
+                        line=issue.line_number,
+                        type=issue.type.value,
+                        severity=issue.severity.value,
+                        title=issue.title,
+                        description=issue.description,
+                        suggestion=issue.suggestion,
+                        code=issue.code_snippet,
+                    )
+                    for issue in review_file.issues
+                ],
+                summary=review_file.summary,
+                score=review_file.score,
+            )
+            for review_file in task.files
+        ]
 
-        return {
-            "summary": " ".join(summaries)[:500],
-            "score": sum(scores) // len(scores),
-            "issues": unique_issues[:10],
-        }
-
-    @staticmethod
-    def _compute_stats(file_reviews: list[dict], aggregate: dict) -> tuple[dict, dict]:
-        severity_counter: Counter[str] = Counter()
-        category_counter: Counter[str] = Counter()
-
-        for file_review in file_reviews:
-            for issue in file_review.get("issues", []):
-                severity_counter[issue.get("severity", "info")] += 1
-                issue_type = issue.get("type", "code-quality")
-                if issue_type == "code-quality":
-                    category_counter["code_quality"] += 1
-                else:
-                    category_counter[issue_type.replace("-", "_")] += 1
-
-        severity = {
-            "critical": severity_counter.get("critical", 0),
-            "high": severity_counter.get("high", 0),
-            "medium": severity_counter.get("medium", 0),
-            "low": severity_counter.get("low", 0),
-            "info": severity_counter.get("info", 0),
-        }
-        categories = {
-            "security": category_counter.get("security", 0),
-            "performance": category_counter.get("performance", 0),
-            "maintainability": category_counter.get("maintainability", 0),
-            "code_quality": category_counter.get("code_quality", 0),
-            "architecture": category_counter.get("architecture", 0),
-        }
-
-        agg_severity = aggregate.get("issue_severity", {})
-        agg_categories = aggregate.get("issues_by_category", {})
-
-        for key in severity:
-            severity[key] = max(severity[key], int(agg_severity.get(key, 0)))
-        for key in categories:
-            categories[key] = max(categories[key], int(agg_categories.get(key, 0)))
-
-        return severity, categories
+        return ReviewSchema(
+            id=str(task.id),
+            repository_url=repository.url,
+            branch=task.branch,
+            repository=RepositorySchema(
+                id=str(repository.id),
+                name=repository.name,
+                owner=repository.owner,
+                url=repository.url,
+                description=repository.description,
+                stars=repository.stars,
+                forks=repository.forks,
+                primary_language=repository.primary_language,
+                languages=[language.name for language in repository.languages],
+                file_count=repository.file_count,
+                dir_count=repository.dir_count,
+                total_lines=repository.total_lines,
+                last_updated=self._format_datetime(repository.last_updated_at),
+            ),
+            metrics=CodeReviewMetricsSchema(
+                overall_score=task.overall_score,
+                security_score=task.security_score,
+                performance_score=task.performance_score,
+                maintainability_score=task.maintainability_score,
+                code_quality_score=task.code_quality_score,
+                architecture_score=task.architecture_score,
+            ),
+            issue_severity=IssueSeveritySchema(**severity_counts),
+            files=files,
+            issues_by_category=IssuesByCategorySchema(
+                security=category_counts["security"],
+                performance=category_counts["performance"],
+                maintainability=category_counts["maintainability"],
+                code_quality=category_counts["code-quality"],
+                architecture=category_counts["architecture"],
+            ),
+            created_at=self._format_datetime(task.created_at),
+            status=task.status.value,
+            progress=task.progress,
+            current_step=task.current_step,
+        )
