@@ -10,14 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import InvalidGitHubUrlError, ReviewNotFoundError
 from app.models import IssueSeverity, IssueType, Review, ReviewStatus
 from app.repositories.review_repository import ReviewRepository
-from app.schemas.review_schema import (
-    AnalysisStepSchema,
+from app.schemas.progress import AnalysisStepSchema, ProgressResponse
+from app.schemas.review_response import (
     CodeReviewMetricsSchema,
     FileReviewSchema,
     IssuesByCategorySchema,
     IssueSchema,
     IssueSeveritySchema,
-    ProgressResponse,
     RepositorySchema,
     ReviewSchema,
 )

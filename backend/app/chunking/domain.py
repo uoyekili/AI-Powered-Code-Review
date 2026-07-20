@@ -55,4 +55,5 @@ class Chunk:
     strategy: ChunkingStrategyType
     start_line: int
     end_line: int
+    language: str = "text"
     metadata: Mapping[str, str] = field(default_factory=dict)

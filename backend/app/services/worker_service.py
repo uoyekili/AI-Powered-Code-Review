@@ -7,10 +7,11 @@ import uuid
 
 from app.chunking import create_default_chunking_service
 from app.database.session import AsyncSessionLocal
+from app.llm import create_chunk_review_runnable
 from app.models import ReviewStatus, StepStatus
 from app.repositories.review_repository import ReviewRepository
 from app.review.pipeline import PipelineContext, ReviewPipeline
-from app.schemas.review_schema import mock_review_result
+from app.schemas.review_fixtures import mock_review_result
 from app.services.llm_review_service import LLMReviewService
 from app.services.report_service import ReportService
 from app.utils.github_url import parse_github_url
@@ -28,7 +29,10 @@ class WorkerService:
 
     def __init__(self) -> None:
         self.pipeline = ReviewPipeline(
-            LLMReviewService(create_default_chunking_service())
+            LLMReviewService(
+                create_default_chunking_service(),
+                create_chunk_review_runnable(),
+            )
         )
         self.report_service = ReportService()
 

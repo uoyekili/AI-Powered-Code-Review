@@ -10,13 +10,10 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import text
 
 from app.api.dependencies import DatabaseSession, ReviewServiceDependency
-from app.schemas.review_schema import (
-    HealthResponse,
-    ProgressResponse,
-    ReviewSchema,
-    SubmitReviewRequest,
-    SubmitReviewResponse,
-)
+from app.schemas.health import HealthResponse
+from app.schemas.progress import ProgressResponse
+from app.schemas.review_request import SubmitReviewRequest, SubmitReviewResponse
+from app.schemas.review_response import ReviewSchema
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

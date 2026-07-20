@@ -74,8 +74,6 @@ class RepositoryService:
             raise RuntimeError("Repository must be cloned before scanning")
 
         settings = get_settings()
-        allowed_exts = settings.allowed_exts
-        ignored_dirs = settings.ignored_dirs
         primary_language = self.repo.language or "Unknown"
 
         file_count = 0
@@ -86,13 +84,13 @@ class RepositoryService:
             directories[:] = [
                 directory
                 for directory in directories
-                if directory not in ignored_dirs
+                if directory not in settings.ignored_dirs
             ]
             dir_count += len(directories)
 
             for filename in filenames:
                 path = Path(root) / filename
-                if path.suffix.lower() not in allowed_exts:
+                if path.suffix.lower() not in settings.allowed_exts:
                     continue
 
                 file_count += 1

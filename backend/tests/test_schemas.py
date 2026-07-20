@@ -1,6 +1,6 @@
 """Tests for schema mock factories."""
 
-from app.schemas.review_schema import empty_metrics, mock_review_result
+from app.schemas.review_fixtures import empty_metrics, mock_review_result
 
 
 def test_empty_metrics_are_zero() -> None:

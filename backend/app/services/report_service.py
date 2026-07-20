@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.schemas.review_schema import ReviewSchema
+from app.schemas.review_response import ReviewSchema
 
 
 class ReportService:

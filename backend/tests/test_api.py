@@ -6,12 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from app.schemas.review_schema import (
-    AnalysisStepSchema,
-    ProgressResponse,
-    SubmitReviewResponse,
-    mock_review_result,
-)
+from app.schemas.progress import AnalysisStepSchema, ProgressResponse
+from app.schemas.review_fixtures import mock_review_result
+from app.schemas.review_request import SubmitReviewResponse
 
 
 class FakeReviewService:
