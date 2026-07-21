@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     log_level: str
 
     # Azure OpenAI
-    azure_openai_chat_api_key: str
     azure_openai_base_url: str
+    azure_openai_chat_api_key: str
     azure_openai_chat_model: str
 
     # LLM Review
