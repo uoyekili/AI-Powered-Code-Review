@@ -2,11 +2,33 @@
 
 An AI-assisted GitHub code review application.
 
+## Services
+
+| Service | Role |
+|---------|------|
+| `api` | Public HTTP API (submit review, progress, results, report) |
+| `worker` | Background poller that runs the review pipeline |
+| `frontend` | Next.js UI |
+| `postgres` | Shared database |
+
 ## Features
 
 - Submit a GitHub repository URL and create a review task
-- Clone and scan the repository structure
-- Chunk source code and review it with an LLM
+- Worker clones/scans the repository and runs the review pipeline
 - Track review progress step by step
 - View findings by file and severity
 - Download a Markdown report
+
+## Local development
+
+```bash
+cp .env.example .env
+cp api/.env.example api/.env
+cp worker/.env.example worker/.env
+cp frontend/.env.example frontend/.env
+
+docker compose -f docker-compose.dev.yml up --build
+```
+
+- API: http://localhost:8000/api/health
+- Frontend: http://localhost:3000

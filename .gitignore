@@ -1,12 +1,18 @@
 .env
 !.env.example
 
-backend/.env
-!backend/.env.example
+api/.env
+!api/.env.example
+
+worker/.env
+!worker/.env.example
 
 frontend/.env
 !frontend/.env.example
 
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
 repos/
 
 .cursor
