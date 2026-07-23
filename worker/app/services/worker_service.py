@@ -6,7 +6,7 @@ import logging
 import uuid
 
 from app.database.session import AsyncSessionLocal
-from app.models import ReviewStatus, StepStatus
+from database.models import ReviewStatus, StepStatus
 from app.repositories.review_repository import ReviewRepository
 from app.review.pipeline import PipelineContext, ReviewPipeline
 from app.schemas.review_fixtures import mock_review_result
@@ -20,7 +20,6 @@ class WorkerService:
     """Run the review pipeline for a single claimed task."""
 
     def __init__(self) -> None:
-        # LLM wiring is deferred until the llm pipeline step is implemented.
         self.pipeline = ReviewPipeline()
         self.report_service = ReportService()
 
@@ -86,9 +85,7 @@ class WorkerService:
                         owner,
                         name,
                     )
-                    review.created_at = task.created_at.isoformat().replace(
-                        "+00:00", "Z"
-                    )
+                    review.created_at = task.created_at.isoformat().replace("+00:00", "Z")
                     report = self.report_service.generate_markdown(review)
 
                     await repository.save_result(

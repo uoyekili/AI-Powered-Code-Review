@@ -3,27 +3,21 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import (
+from database.models import (
     CodeRepository,
-    IssueSeverity,
-    IssueType,
-    RepositoryLanguage,
     Review,
     ReviewFile,
-    ReviewIssue,
     ReviewStatus,
     ReviewStep,
     StepStatus,
 )
 
-DEFAULT_STEPS: list[dict[str, Any]] = [
+DEFAULT_STEPS = [
     {
         "id": "clone",
         "name": "Clone Repository",
@@ -77,7 +71,7 @@ DEFAULT_STEPS: list[dict[str, Any]] = [
 
 
 class ReviewRepository:
-    """CRUD and state updates for normalized review records."""
+    """Create and read normalized review records for the API."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -151,128 +145,6 @@ class ReviewRepository:
             )
         )
         return result.scalar_one_or_none()
-
-    async def update_progress(
-        self,
-        task: Review,
-        *,
-        progress: int | None = None,
-        current_step: str | None = None,
-        status: str | None = None,
-        error_message: str | None = None,
-    ) -> None:
-        """
-        Update task progress fields.
-
-        Args:
-            task: Task to update.
-            progress: Optional progress percentage.
-            current_step: Optional current step label.
-            status: Optional lifecycle status.
-            error_message: Optional failure message.
-        """
-
-        if progress is not None:
-            task.progress = progress
-        if current_step is not None:
-            task.current_step = current_step
-        if status is not None:
-            task.status = ReviewStatus(status)
-            now = datetime.now(timezone.utc)
-            if task.status is ReviewStatus.IN_PROGRESS and task.started_at is None:
-                task.started_at = now
-            if task.status in {ReviewStatus.COMPLETED, ReviewStatus.FAILED}:
-                task.completed_at = now
-        if error_message is not None:
-            task.error_message = error_message
-        await self.session.flush()
-
-    async def update_step(
-        self,
-        step: ReviewStep,
-        status: StepStatus,
-    ) -> None:
-        """Update one pipeline step and its lifecycle timestamps."""
-
-        step.status = status
-        now = datetime.now(timezone.utc)
-        if status is StepStatus.IN_PROGRESS and step.started_at is None:
-            step.started_at = now
-        if status in {StepStatus.COMPLETED, StepStatus.FAILED}:
-            step.completed_at = now
-        await self.session.flush()
-
-    async def save_result(
-        self,
-        task: Review,
-        result: dict[str, Any],
-        report_markdown: str,
-    ) -> None:
-        """
-        Persist the completed review payload and report.
-
-        Args:
-            task: Task to update.
-            result: Serialized review result.
-            report_markdown: Final Markdown report body.
-        """
-
-        repository_data = result.get("repository", {})
-        task.repository.description = repository_data.get("description", "")
-        task.repository.stars = repository_data.get("stars", 0)
-        task.repository.forks = repository_data.get("forks", 0)
-        task.repository.primary_language = repository_data.get(
-            "primary_language", "Unknown"
-        )
-        task.repository.file_count = repository_data.get("file_count", 0)
-        task.repository.dir_count = repository_data.get("dir_count", 0)
-        task.repository.total_lines = repository_data.get("total_lines", 0)
-        task.repository.languages = [
-            RepositoryLanguage(name=language)
-            for language in repository_data.get("languages", [])
-        ]
-
-        metrics = result.get("metrics", {})
-        task.overall_score = metrics.get("overall_score", 0)
-        task.security_score = metrics.get("security_score", 0)
-        task.performance_score = metrics.get("performance_score", 0)
-        task.maintainability_score = metrics.get("maintainability_score", 0)
-        task.code_quality_score = metrics.get("code_quality_score", 0)
-        task.architecture_score = metrics.get("architecture_score", 0)
-
-        task.issues.clear()
-        task.files.clear()
-        for file_data in result.get("files", []):
-            review_file = ReviewFile(
-                path=file_data["path"],
-                name=file_data["name"],
-                extension=file_data.get("extension", ""),
-                line_count=file_data.get("lines", 0),
-                summary=file_data.get("summary", ""),
-                score=file_data.get("score", 0),
-            )
-            task.files.append(review_file)
-            for issue_data in file_data.get("issues", []):
-                task.issues.append(
-                    ReviewIssue(
-                        file=review_file,
-                        external_id=issue_data.get("id"),
-                        file_path=issue_data.get("file", review_file.path),
-                        line_number=issue_data.get("line", 0),
-                        type=IssueType(issue_data["type"]),
-                        severity=IssueSeverity(issue_data["severity"]),
-                        title=issue_data["title"],
-                        description=issue_data.get("description", ""),
-                        suggestion=issue_data.get("suggestion", ""),
-                        code_snippet=issue_data.get("code"),
-                    )
-                )
-
-        task.report_markdown = report_markdown
-        task.status = ReviewStatus.COMPLETED
-        task.progress = 100
-        task.completed_at = datetime.now(timezone.utc)
-        await self.session.flush()
 
     async def _get_or_create_repository(
         self,

@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_DIR = Path(__file__).resolve().parents[2]
@@ -19,18 +19,18 @@ class Settings(BaseSettings):
     )
 
     # Database
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
-    postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    postgres_user: str = Field(init=False)
+    postgres_password: str = Field(init=False)
+    postgres_db: str = Field(init=False)
+    postgres_host: str = Field(init=False)
+    postgres_port: int = Field(init=False)
 
     # API / CORS
-    api_prefix: str
-    cors_origins: str
+    api_prefix: str = Field(init=False)
+    cors_origins: str = Field(init=False)
 
     # Logging
-    log_level: str
+    log_level: str = Field(init=False)
 
     @field_validator("cors_origins")
     @classmethod
@@ -42,9 +42,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [
-            origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
-        ]
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @property
     def database_url(self) -> str:

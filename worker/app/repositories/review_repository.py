@@ -10,124 +10,24 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import (
+from database.models import (
     CodeRepository,
-    IssueSeverity,
-    IssueType,
-    RepositoryLanguage,
-    Review,
+        Review,
     ReviewFile,
-    ReviewIssue,
     ReviewStatus,
     ReviewStep,
     StepStatus,
 )
-
-DEFAULT_STEPS: list[dict[str, Any]] = [
-    {
-        "id": "clone",
-        "name": "Clone Repository",
-        "description": "Clone the GitHub repository",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 20,
-    },
-    {
-        "id": "scan",
-        "name": "Repository Scanner",
-        "description": "Detect language, framework, and project structure",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 30,
-    },
-    {
-        "id": "static",
-        "name": "Static Analysis",
-        "description": "Run lint, security, and complexity checks",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 40,
-    },
-    {
-        "id": "chunk",
-        "name": "Repository Chunking",
-        "description": "Split the project into logical code chunks",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 20,
-    },
-    {
-        "id": "llm",
-        "name": "Parallel LLM Review",
-        "description": "Review code chunks with LLM workers",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 60,
-    },
-    {
-        "id": "merge",
-        "name": "Merge Review Results",
-        "description": "Merge issues, rank severity, and calculate scores",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 20,
-    },
-    {
-        "id": "report",
-        "name": "Generate Final Report",
-        "description": "Build the final review report",
-        "status": StepStatus.PENDING.value,
-        "estimated_time": 15,
-    },
-]
+from api.app.schemas.review_response import ReviewSchema
+from api.app.schemas.review_response import RepositorySchema, CodeReviewMetricsSchema, IssueSeveritySchema, IssueSchema, FileReviewSchema, IssuesByCategorySchema
+from database.models import RepositoryLanguage, ReviewIssue, IssueType, IssueSeverity
 
 
 class ReviewRepository:
-    """CRUD and state updates for normalized review records."""
+    """Claim, update, and persist review work for the worker."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
-
-    async def create_task(
-        self,
-        repository_url: str,
-        owner: str,
-        name: str,
-        branch: str,
-    ) -> Review:
-        """
-        Create a pending review task.
-
-        Args:
-            repository_url: Validated GitHub repository URL.
-            owner: GitHub repository owner.
-            name: GitHub repository name.
-            branch: Git branch to review.
-
-        Returns:
-            Persisted review task.
-        """
-
-        code_repository = await self._get_or_create_repository(
-            repository_url,
-            owner,
-            name,
-        )
-        task = Review(
-            repository=code_repository,
-            branch=branch,
-            status=ReviewStatus.PENDING,
-            progress=0,
-            current_step="",
-            steps=[
-                ReviewStep(
-                    step_key=step["id"],
-                    position=position,
-                    name=step["name"],
-                    description=step["description"],
-                    status=StepStatus.PENDING,
-                    estimated_time=step["estimated_time"],
-                )
-                for position, step in enumerate(DEFAULT_STEPS)
-            ],
-        )
-        self.session.add(task)
-        await self.session.flush()
-        return task
 
     async def get_task(self, task_id: uuid.UUID) -> Review | None:
         """
@@ -232,7 +132,7 @@ class ReviewRepository:
     async def save_result(
         self,
         task: Review,
-        result: dict[str, Any],
+        result: ReviewSchema,
         report_markdown: str,
     ) -> None:
         """
@@ -244,54 +144,49 @@ class ReviewRepository:
             report_markdown: Final Markdown report body.
         """
 
-        repository_data = result.get("repository", {})
-        task.repository.description = repository_data.get("description", "")
-        task.repository.stars = repository_data.get("stars", 0)
-        task.repository.forks = repository_data.get("forks", 0)
-        task.repository.primary_language = repository_data.get(
-            "primary_language", "Unknown"
-        )
-        task.repository.file_count = repository_data.get("file_count", 0)
-        task.repository.dir_count = repository_data.get("dir_count", 0)
-        task.repository.total_lines = repository_data.get("total_lines", 0)
-        task.repository.languages = [
-            RepositoryLanguage(name=language)
-            for language in repository_data.get("languages", [])
-        ]
+        repository_data = result.repository
+        task.repository.description = repository_data.description
+        task.repository.stars = repository_data.stars
+        task.repository.forks = repository_data.forks
+        task.repository.primary_language = repository_data.primary_language
+        task.repository.file_count = repository_data.file_count
+        task.repository.dir_count = repository_data.dir_count
+        task.repository.total_lines = repository_data.total_lines
+        task.repository.languages = [RepositoryLanguage(name=language) for language in repository_data.languages]
 
-        metrics = result.get("metrics", {})
-        task.overall_score = metrics.get("overall_score", 0)
-        task.security_score = metrics.get("security_score", 0)
-        task.performance_score = metrics.get("performance_score", 0)
-        task.maintainability_score = metrics.get("maintainability_score", 0)
-        task.code_quality_score = metrics.get("code_quality_score", 0)
-        task.architecture_score = metrics.get("architecture_score", 0)
+        metrics = result.metrics
+        task.overall_score = metrics.overall_score
+        task.security_score = metrics.security_score
+        task.performance_score = metrics.performance_score
+        task.maintainability_score = metrics.maintainability_score
+        task.code_quality_score = metrics.code_quality_score
+        task.architecture_score = metrics.architecture_score
 
         task.issues.clear()
         task.files.clear()
-        for file_data in result.get("files", []):
+        for file_data in result.files:
             review_file = ReviewFile(
-                path=file_data["path"],
-                name=file_data["name"],
-                extension=file_data.get("extension", ""),
-                line_count=file_data.get("lines", 0),
-                summary=file_data.get("summary", ""),
-                score=file_data.get("score", 0),
+                path=file_data.path,
+                name=file_data.name,
+                extension=file_data.extension,
+                line_count=file_data.lines,
+                summary=file_data.summary,
+                score=file_data.score,
             )
             task.files.append(review_file)
-            for issue_data in file_data.get("issues", []):
+            for issue_data in file_data.issues:
                 task.issues.append(
                     ReviewIssue(
                         file=review_file,
-                        external_id=issue_data.get("id"),
-                        file_path=issue_data.get("file", review_file.path),
-                        line_number=issue_data.get("line", 0),
-                        type=IssueType(issue_data["type"]),
-                        severity=IssueSeverity(issue_data["severity"]),
-                        title=issue_data["title"],
-                        description=issue_data.get("description", ""),
-                        suggestion=issue_data.get("suggestion", ""),
-                        code_snippet=issue_data.get("code"),
+                        external_id=issue_data.id,
+                        file_path=issue_data.file,
+                        line_number=issue_data.line,
+                        type=IssueType(issue_data.type),
+                        severity=IssueSeverity(issue_data.severity),
+                        title=issue_data.title,
+                        description=issue_data.description,
+                        suggestion=issue_data.suggestion,
+                        code_snippet=issue_data.code,
                     )
                 )
 
@@ -300,23 +195,3 @@ class ReviewRepository:
         task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
         await self.session.flush()
-
-    async def _get_or_create_repository(
-        self,
-        repository_url: str,
-        owner: str,
-        name: str,
-    ) -> CodeRepository:
-        result = await self.session.execute(
-            select(CodeRepository).where(CodeRepository.url == repository_url)
-        )
-        code_repository = result.scalar_one_or_none()
-        if code_repository is None:
-            code_repository = CodeRepository(
-                url=repository_url,
-                owner=owner,
-                name=name,
-            )
-            self.session.add(code_repository)
-            await self.session.flush()
-        return code_repository

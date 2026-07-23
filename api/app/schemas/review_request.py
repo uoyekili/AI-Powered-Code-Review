@@ -27,10 +27,7 @@ class SubmitReviewRequest(CamelModel):
             or ".." in branch
             or "//" in branch
             or "@{" in branch
-            or any(
-                character.isspace() or character in forbidden_characters
-                for character in branch
-            )
+            or any(character.isspace() or character in forbidden_characters for character in branch)
         ):
             raise ValueError("must be a valid Git branch name")
         return branch

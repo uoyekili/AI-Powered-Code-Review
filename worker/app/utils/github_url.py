@@ -24,7 +24,7 @@ class GitHubRepoInfo:
         return f"https://github.com/{self.owner}/{self.name}"
 
 
-def parse_github_url(url: str) -> GitHubRepoInfo | None:
+def parse_github_url(url: str) -> GitHubRepoInfo:
     """
     Parse a GitHub repository URL.
 
@@ -45,18 +45,15 @@ def parse_github_url(url: str) -> GitHubRepoInfo | None:
         repo = match.group("repo")
         if repo.endswith(".git"):
             repo = repo[:-4]
-        return GitHubRepoInfo(
-            owner=owner,
-            name=repo,
-        )
+        return GitHubRepoInfo(owner=owner, name=repo)
 
     parsed = urlparse(url)
     if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
-        return None
+        raise ValueError(f"Invalid GitHub repository URL: {url}")
 
     parts = [part for part in parsed.path.split("/") if part]
     if len(parts) < 2:
-        return None
+        raise ValueError(f"Invalid GitHub repository URL: {url}")
 
     owner, repo = parts[0], parts[1]
     if repo.endswith(".git"):

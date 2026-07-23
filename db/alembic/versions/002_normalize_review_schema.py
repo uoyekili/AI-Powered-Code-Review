@@ -86,18 +86,10 @@ def upgrade() -> None:
         sa.Column("report_markdown", sa.Text(), nullable=True),
         sa.Column("overall_score", sa.Integer(), server_default="0", nullable=False),
         sa.Column("security_score", sa.Integer(), server_default="0", nullable=False),
-        sa.Column(
-            "performance_score", sa.Integer(), server_default="0", nullable=False
-        ),
-        sa.Column(
-            "maintainability_score", sa.Integer(), server_default="0", nullable=False
-        ),
-        sa.Column(
-            "code_quality_score", sa.Integer(), server_default="0", nullable=False
-        ),
-        sa.Column(
-            "architecture_score", sa.Integer(), server_default="0", nullable=False
-        ),
+        sa.Column("performance_score", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("maintainability_score", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("code_quality_score", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("architecture_score", sa.Integer(), server_default="0", nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -107,12 +99,8 @@ def upgrade() -> None:
             "status IN ('pending', 'in-progress', 'completed', 'failed')",
             name="review_status",
         ),
-        sa.CheckConstraint(
-            "overall_score BETWEEN 0 AND 100", name="ck_reviews_overall_score"
-        ),
-        sa.CheckConstraint(
-            "security_score BETWEEN 0 AND 100", name="ck_reviews_security_score"
-        ),
+        sa.CheckConstraint("overall_score BETWEEN 0 AND 100", name="ck_reviews_overall_score"),
+        sa.CheckConstraint("security_score BETWEEN 0 AND 100", name="ck_reviews_security_score"),
         sa.CheckConstraint(
             "performance_score BETWEEN 0 AND 100",
             name="ck_reviews_performance_score",
@@ -157,9 +145,7 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint("position >= 0", name="ck_review_steps_position"),
-        sa.CheckConstraint(
-            "estimated_time >= 0", name="ck_review_steps_estimated_time"
-        ),
+        sa.CheckConstraint("estimated_time >= 0", name="ck_review_steps_estimated_time"),
         sa.CheckConstraint(
             "status IN ('pending', 'in-progress', 'completed', 'failed')",
             name="step_status",
@@ -202,9 +188,7 @@ def upgrade() -> None:
         sa.Column("review_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("file_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("external_id", sa.String(length=255), nullable=True),
-        sa.Column(
-            "file_path", sa.String(length=1024), server_default="", nullable=False
-        ),
+        sa.Column("file_path", sa.String(length=1024), server_default="", nullable=False),
         sa.Column("line_number", sa.Integer(), server_default="0", nullable=False),
         sa.Column("type", sa.String(length=32), nullable=False),
         sa.Column("severity", sa.String(length=32), nullable=False),
@@ -316,9 +300,7 @@ def _migrate_legacy_data() -> None:
             ON CONFLICT DO NOTHING
             """))
 
-    step_uuid = uuid_from_md5.format(
-        value="task.id::text || ':step:' || step.value->>'id'"
-    )
+    step_uuid = uuid_from_md5.format(value="task.id::text || ':step:' || step.value->>'id'")
     op.execute(sa.text(f"""
             INSERT INTO review_steps (
                 id, review_id, step_key, position, name, description,
@@ -340,9 +322,7 @@ def _migrate_legacy_data() -> None:
                 WITH ORDINALITY AS step(value, ordinality)
             """))
 
-    file_uuid = uuid_from_md5.format(
-        value="task.id::text || ':file:' || file.value->>'path'"
-    )
+    file_uuid = uuid_from_md5.format(value="task.id::text || ':file:' || file.value->>'path'")
     op.execute(sa.text(f"""
             INSERT INTO review_files (
                 id, review_id, path, name, extension, line_count, summary, score
@@ -364,8 +344,7 @@ def _migrate_legacy_data() -> None:
 
     issue_uuid = uuid_from_md5.format(
         value=(
-            "task.id::text || ':issue:' || file.value->>'path' || ':' || "
-            "issue.ordinality::text"
+            "task.id::text || ':issue:' || file.value->>'path' || ':' || " "issue.ordinality::text"
         )
     )
     op.execute(sa.text(f"""

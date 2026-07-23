@@ -10,6 +10,7 @@ An AI-assisted GitHub code review application.
 | `worker` | Background poller that runs the review pipeline |
 | `frontend` | Next.js UI |
 | `postgres` | Shared database |
+| `db` | Shared SQLAlchemy models and Alembic migrations (`import database`) |
 
 ## Features
 
@@ -32,3 +33,9 @@ docker compose -f docker-compose.dev.yml up --build
 
 - API: http://localhost:8000/api/health
 - Frontend: http://localhost:3000
+
+## Database package
+
+ORM models live in `db/database/` (import as `database.*`); Alembic lives
+alongside in `db/alembic/`. The API runs `alembic upgrade head` on
+startup; api and worker both import `database.models`.

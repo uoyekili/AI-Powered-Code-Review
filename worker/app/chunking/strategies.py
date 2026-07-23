@@ -150,11 +150,7 @@ class HybridChunkingStrategy:
     ) -> Sequence[Chunk]:
         # TODO: Select a specialized strategy, then enforce token-size constraints.
         strategy = next(
-            (
-                candidate
-                for candidate in self._strategies
-                if candidate.supports(document)
-            ),
+            (candidate for candidate in self._strategies if candidate.supports(document)),
             self._fallback,
         )
         delegated_options = ChunkingOptions(

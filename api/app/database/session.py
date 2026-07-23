@@ -2,39 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from database.session import create_engine, create_get_db, create_session_factory
 
 from app.config.settings import get_settings
 
 settings = get_settings()
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    pool_pre_ping=True,
-)
-
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Yield a request-scoped database session.
-
-    Commits on success and rolls back on error.
-    """
-
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        else:
-            await session.commit()
+engine = create_engine(settings.database_url)
+AsyncSessionLocal = create_session_factory(engine)
+get_db = create_get_db(AsyncSessionLocal)

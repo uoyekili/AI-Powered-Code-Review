@@ -16,8 +16,8 @@ services:
 
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: api/Dockerfile.dev
     container_name: code-review-api-dev
     env_file:
       - ./api/.env
@@ -26,24 +26,26 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./api:/app
-      - api_venv:/app/.venv
+      - ./api:/workspace/api
+      - ./db:/workspace/db
+      - api_venv:/workspace/.venv
     depends_on:
       postgres:
         condition: service_healthy
 
   worker:
     build:
-      context: ./worker
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: worker/Dockerfile.dev
     container_name: code-review-worker-dev
     env_file:
       - ./worker/.env
     environment:
       POSTGRES_HOST: postgres
     volumes:
-      - ./worker:/app
-      - worker_venv:/app/.venv
+      - ./worker:/workspace/worker
+      - ./db:/workspace/db
+      - worker_venv:/workspace/.venv
       - clone_data_dev:/tmp/repos
     depends_on:
       postgres:

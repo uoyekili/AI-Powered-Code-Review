@@ -3,15 +3,13 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.config.settings import get_settings
-from app.database.base import Base
-from app.models import *  # noqa: F401, F403
+from database.base import Base
+from database.models import *  # noqa: F401, F403
+from database.settings import get_database_settings
 
 config = context.config
-settings = get_settings()
-
-sync_url = settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
-config.set_main_option("sqlalchemy.url", sync_url)
+settings = get_database_settings()
+config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

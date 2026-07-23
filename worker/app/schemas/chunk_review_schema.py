@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.models.review import IssueSeverity, IssueType
+from database.models import IssueSeverity, IssueType
 
 
 class LLMIssueDraft(BaseModel):

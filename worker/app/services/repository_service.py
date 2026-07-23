@@ -14,7 +14,7 @@ from github import Github
 from github.Repository import Repository
 
 from app.config.settings import get_settings
-from app.utils.github_url import parse_github_url
+from app.utils.github_url import GitHubRepoInfo, parse_github_url
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +33,11 @@ class RepositoryService:
     """Clone and inspect GitHub repositories."""
 
     def __init__(self, repository_url: str, branch: str) -> None:
-        self.repo_info = parse_github_url(repository_url)
-        if self.repo_info is None:
-            raise ValueError(f"Invalid GitHub repository URL: {repository_url}")
+        self.repo_info: GitHubRepoInfo = parse_github_url(repository_url)
+
         self.repo = self._load_repository()
-        self.local_path = None
-        self.branch = branch
+        self.local_path: Path | None = None
+        self.branch: str = branch
 
     def _load_repository(self) -> Repository:
         github = Github()
@@ -84,9 +83,7 @@ class RepositoryService:
 
         for root, directories, filenames in os.walk(self.local_path):
             directories[:] = [
-                directory
-                for directory in directories
-                if directory not in settings.ignored_dirs
+                directory for directory in directories if directory not in settings.ignored_dirs
             ]
             dir_count += len(directories)
 

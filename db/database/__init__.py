@@ -1,6 +1,7 @@
-"""Database models."""
+"""Shared database package for API and worker services."""
 
-from app.models.review import (
+from database.base import Base
+from database.models import (
     CodeRepository,
     IssueSeverity,
     IssueType,
@@ -14,6 +15,7 @@ from app.models.review import (
 )
 
 __all__ = [
+    "Base",
     "CodeRepository",
     "IssueSeverity",
     "IssueType",

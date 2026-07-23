@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable
 
 __all__ = ["create_chunk_review_runnable"]
 

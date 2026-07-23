@@ -1,17 +1,14 @@
 """Database models."""
 
-from app.models.review import (
-    CodeRepository,
+from database.models.enums import (
     IssueSeverity,
     IssueType,
-    RepositoryLanguage,
-    Review,
-    ReviewFile,
-    ReviewIssue,
     ReviewStatus,
-    ReviewStep,
     StepStatus,
 )
+from database.models.finding import ReviewFile, ReviewIssue
+from database.models.repository import CodeRepository, RepositoryLanguage
+from database.models.review import Review, ReviewStep
 
 __all__ = [
     "CodeRepository",

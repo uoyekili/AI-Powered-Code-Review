@@ -59,10 +59,7 @@ class LLMReviewService:
             [self._build_input(chunk) for chunk in chunks],
             config={"max_concurrency": max_concurrency},
         )
-        return [
-            self._to_result(chunk, draft)
-            for chunk, draft in zip(chunks, drafts, strict=True)
-        ]
+        return [self._to_result(chunk, draft) for chunk, draft in zip(chunks, drafts, strict=True)]
 
     def _build_input(self, chunk: Chunk) -> dict[str, Any]:
         return {

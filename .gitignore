@@ -14,5 +14,11 @@ frontend/.env
 **/__pycache__/
 **/.pytest_cache/
 repos/
+*.egg-info/
+dist/
+build/
 
 .cursor
+.vscode/
+!.vscode/settings.json
+

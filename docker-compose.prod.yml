@@ -15,8 +15,8 @@ services:
 
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: api/Dockerfile.prod
     container_name: code-review-api
     restart: unless-stopped
     env_file:
@@ -37,8 +37,8 @@ services:
 
   worker:
     build:
-      context: ./worker
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: worker/Dockerfile.prod
     container_name: code-review-worker
     restart: unless-stopped
     env_file:

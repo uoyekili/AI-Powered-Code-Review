@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 WORKER_DIR = Path(__file__).resolve().parents[2]
@@ -19,33 +19,33 @@ class Settings(BaseSettings):
     )
 
     # Database
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
-    postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    postgres_user: str = Field(init=False)
+    postgres_password: str = Field(init=False)
+    postgres_db: str = Field(init=False)
+    postgres_host: str = Field(init=False)
+    postgres_port: int = Field(init=False)
 
     # Logging
-    log_level: str
+    log_level: str = Field(init=False)
 
     # Polling
-    poll_interval_seconds: float = 2.0
+    poll_interval_seconds: float = Field(init=False)
 
     # Azure OpenAI
-    azure_openai_base_url: str
-    azure_openai_chat_api_key: str
-    azure_openai_chat_model: str
+    azure_openai_base_url: str = Field(init=False)
+    azure_openai_chat_api_key: SecretStr = Field(init=False)
+    azure_openai_chat_model: str = Field(init=False)
 
     # LLM Review
-    llm_max_concurrency: int
+    llm_max_concurrency: int = Field(init=False)
 
     # Repository
-    clone_dir: str
+    clone_dir: str = Field(init=False)
 
     # Source discovery
-    source_max_file_bytes: int
-    source_allowed_extensions: str
-    source_ignored_directories: str
+    source_max_file_bytes: int = Field(init=False)
+    source_allowed_extensions: str = Field(init=False)
+    source_ignored_directories: str = Field(init=False)
 
     @field_validator("source_max_file_bytes")
     @classmethod
@@ -83,9 +83,7 @@ class Settings(BaseSettings):
     @property
     def ignored_dirs(self) -> frozenset[str]:
         return frozenset(
-            value.strip()
-            for value in self.source_ignored_directories.split(",")
-            if value.strip()
+            value.strip() for value in self.source_ignored_directories.split(",") if value.strip()
         )
 
     @property
