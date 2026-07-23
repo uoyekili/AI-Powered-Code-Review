@@ -10,7 +10,7 @@ An AI-assisted GitHub code review application.
 | `worker` | Background poller that runs the review pipeline |
 | `frontend` | Next.js UI |
 | `postgres` | Shared database |
-| `db` | Shared SQLAlchemy models and Alembic migrations (`import database`) |
+| `db` | Shared SQLAlchemy models and Alembic migrations |
 
 ## Features
 
